@@ -1,0 +1,13 @@
+Package: libkrun-dev
+Source: libkrun
+Version: 2.0.0~dev1-1
+Architecture: amd64
+Maintainer: Aria Stewart <aredridel@dinhe.net>
+Installed-Size: 67
+Depends: libkrun2 (= 2.0.0~dev1-1)
+Section: libdevel
+Priority: optional
+Multi-Arch: same
+Homepage: https://github.com/libkrun/libkrun
+Description: Development files for libkrun
+ Headers and pkg-config metadata for building programs that embed libkrun.

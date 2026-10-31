@@ -1,0 +1,130 @@
+Build notes
+===========
+
+Vendored Rust sources
+---------------------
+The build runs with CARGO_NET_OFFLINE and takes every crate from directory
+sources under debian/, so `dpkg-buildpackage` needs no network:
+
+  debian/vendor/                    crates.io
+  debian/vendor-ffier-0.2.0rc1/     ffier at tag 0.2.0rc1
+  debian/vendor-ffier-v0.2.0-rc2/   ffier at tag v0.2.0-rc2
+
+The workspace pins two commits of the ffier repository (src/libkrun uses
+v0.2.0-rc2, init and bindings use 0.2.0rc1). Both declare version 0.2.0, and a
+vendor directory cannot hold two packages with the same name and version, which
+is why each commit has its own directory source.
+
+After changing any Cargo.toml or Cargo.lock, run `debian/update-vendor.sh`
+(needs network) and commit the result. debian/cargo-home/config.toml maps the
+sources and is read through CARGO_HOME, which debian/rules sets; the child
+`cargo` that init-blob would spawn inherits it.
+
+The trees hold no compiled objects: `debian/update-vendor.sh` deletes every
+`*.a`, `*.la`, `*.o` and `*.so` after `cargo vendor` and drops the matching
+entries from each crate's `.cargo-checksum.json`, which cargo accepts and which is
+what dh-cargo's per-crate checksum manifests do. The objects come from crates
+that only build for Windows and wasm targets (`winapi`'s MinGW import libraries,
+`wit-bindgen`'s prebuilt C-ABI runtime), and dpkg-source would omit them from the
+source package regardless, since its default ignore list excludes those
+suffixes from everything under debian/ and cannot be shortened. Pruning them
+keeps the vendored tree, the source package and the build graph in agreement.
+
+The vendored trees still contain files that dpkg-source classifies as binary -
+anything whose first 4 KiB hold a NUL byte, such as test fixtures and the images
+in rutabaga_gfx - so `debian/source/include-binaries` lists those.
+`debian/update-vendor.sh` regenerates the list together with the trees, so the
+two cannot drift.
+
+dh-cargo is not usable here: the workspace depends on a git repository that is
+not in the archive, so the build drives cargo through the upstream Makefile
+instead of through a Debian-patched Cargo.lock.
+
+Rust toolchain
+--------------
+libkrun needs rustc 1.88: the sources use let-chains and `[T]::as_chunks`, which
+were stabilised in that release. Debian ships a single toolchain under the plain
+`cargo`, `rustc` and `rustfmt` names. Ubuntu additionally ships
+parallel-installable toolchains whose binaries carry a version suffix, and its
+plain names can be older than libkrun requires - on Ubuntu 25.10 the plain ones
+are 1.85.1, while rustc-1.88, cargo-1.88 and rustfmt-1.88 are in
+questing-updates/universe. Build-Depends therefore names the versioned packages
+first, `cargo-1.88 | cargo (>= 1.88)` and the matching pairs, and debian/rules
+builds a debian/rust-bin directory holding `cargo`, `rustc` and `rustfmt` links
+to the versioned toolchain and puts it at the front of PATH. The upstream
+Makefile, init/init-blob/build.rs and the ffier binding generator all invoke the
+plain names.
+
+rustfmt is a build dependency because bindings/libkrun-via-cdylib-weak
+regenerates the Rust client during the build, and ffier-gen-rust-client runs
+`rustfmt --edition 2024` over the generated code.
+
+Guest init binary
+-----------------
+The guest PID 1 binary is embedded in libkrun_init.so. Upstream cross-compiles
+it for <arch>-unknown-linux-musl, which requires a rustup toolchain with that
+target installed; Debian and Ubuntu ship Rust standard libraries only for the
+host triple. debian/rules therefore builds init/init-binary for the host gnu
+triple with `-C target-feature=+crt-static` and hands the result to the
+init-blob crate through KRUN_INIT_BINARY_PATH. The resulting guest init is a
+static PIE linked against glibc; it links no DNS, NSS or dynamic-loading code,
+so there is no behavioural difference for PID 1.
+
+GPU device model
+----------------
+The `gpu` feature pulls in rutabaga_gfx, which requires pkg-config
+`virglrenderer >= 1.3.0` and fails to build against older releases. Debian
+forky/sid ship 1.3.0; Ubuntu 25.10 ships 1.1.0. debian/rules probes the
+installed version and builds the GPU device model only where it is new enough,
+printing a warning when it is not. libvirglrenderer-dev is listed unversioned in
+Build-Depends so that the source package is installable in both distributions.
+
+`virgl_resource_map2` (`make VIRGL_RESOURCE_MAP2=1`) is not enabled. The code
+path at src/devices/src/virtio/gpu/virtio_gpu.rs:863 calls
+`Rutabaga::resource_map` and imports `RUTABAGA_HANDLE_TYPE_MEM_SHM`, and neither
+exists in rutabaga_gfx 0.1.85 - the version Cargo.lock pins, the version
+src/devices/Cargo.toml requires, and the newest release on crates.io. Building
+the generic variant with that feature fails with E0432 and E0599. The GPU device
+model itself builds and packages correctly against virglrenderer 1.3.0.
+
+Source package
+--------------
+The source format is 3.0 (quilt), so `dpkg-buildpackage -S` needs an upstream
+tarball named after the upstream part of the version:
+
+  libkrun_2.0.0~dev1.orig.tar.xz
+
+Upstream has no 2.0.0 release yet, so that tarball is a snapshot of the git tree
+with the `debian/` directory removed, for example
+`git archive <commit> | tar -x -C libkrun-2.0.0~dev`, then `tar -cJf` that
+directory. The vendor trees travel in the .debian.tar.xz because they live under
+debian/, which is also why the binary fixture files appear in
+debian/source/include-binaries.
+
+Tests
+-----
+`make test` boots virtual machines and needs /dev/kvm plus libkrunfw, so
+dh_auto_test is overridden to a no-op. There is no autopkgtest suite.
+
+TEE variants (not packaged)
+---------------------------
+The AMD SEV and Intel TDX variants (`make SEV=1`, `make TDX=1`) do not build at
+this upstream revision, so libkrun-sev2/libkrun-tdx2 and their -dev packages are
+not shipped. `cargo build --release --features amd-sev,ffi` fails with:
+
+  error[E0433]: failed to resolve: could not find `balloon` in `virtio`
+    --> src/libkrun/src/api/mod.rs:150:27
+  150 |   enum devices::virtio::balloon::FreePageReportingMode,
+
+`src/devices/src/virtio/mod.rs` removes `virtio::balloon` when the devices crate
+is built with its `tee` feature, which `amd-sev` and `tdx` enable through
+`devices/amd-sev` and `devices/tdx`. The matching `#[cfg(not(feature = "tee"))]`
+on the api entry is not applied to the code that `ffier::generate_bridge!`
+emits for it, so the reference survives and fails to resolve. No job under
+.github/workflows builds SEV or TDX, so CI does not catch this.
+
+The variants can be packaged once that gating is fixed upstream: add the
+libkrun-sev2, libkrun-sev-dev, libkrun-tdx2 and libkrun-tdx-dev stanzas to
+debian/control with `Architecture: amd64`, an .install file per package, and the
+corresponding `$(MAKE) $(MAKE_VARS) SEV=1 FFI=1` and `TDX=1` lines to the
+dh_auto_build and dh_auto_install targets.

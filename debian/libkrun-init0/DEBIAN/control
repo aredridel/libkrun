@@ -1,0 +1,16 @@
+Package: libkrun-init0
+Source: libkrun
+Version: 2.0.0~dev1-1
+Architecture: amd64
+Maintainer: Aria Stewart <aredridel@dinhe.net>
+Installed-Size: 2604
+Depends: libc6 (>= 2.34), libgcc-s1 (>= 4.2)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://github.com/libkrun/libkrun
+Description: Guest init configuration library for libkrun
+ Host-side library that builds the configuration a libkrun guest needs and
+ injects it, together with the PID 1 binary it embeds, into the guest
+ filesystem overlay. It also converts OCI container specifications into guest
+ initialization structures.

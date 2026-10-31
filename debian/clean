@@ -1,0 +1,7 @@
+debian/init-target
+debian/rust-bin
+debian/cargo-home/registry
+debian/cargo-home/git
+debian/cargo-home/.package-cache
+debian/cargo-home/.package-cache-mutate
+debian/cargo-home/.global-cache

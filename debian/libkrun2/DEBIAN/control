@@ -1,0 +1,19 @@
+Package: libkrun2
+Source: libkrun
+Version: 2.0.0~dev1-1
+Architecture: amd64
+Maintainer: Aria Stewart <aredridel@dinhe.net>
+Installed-Size: 4875
+Depends: libbz2-1.0, libc6 (>= 2.34), libgcc-s1 (>= 4.2)
+Suggests: libkrunfw5
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://github.com/libkrun/libkrun
+Description: Virtualization-based process isolation library
+ libkrun lets a program run processes in a partially isolated environment
+ using hardware virtualization: KVM on Linux, HVF on macOS and WHP on
+ Windows. It embeds the userspace side of the hypervisor and the minimum set
+ of virtio devices a container-like workload needs, and exposes a C API.
+ .
+ The guest kernel is loaded from libkrunfw at run time.

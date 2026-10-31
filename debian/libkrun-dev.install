@@ -1,0 +1,5 @@
+usr/include/libkrun.h
+usr/include/libkrun_display.h
+usr/include/libkrun_input.h
+usr/lib/*/libkrun.so
+usr/lib/*/pkgconfig/libkrun.pc

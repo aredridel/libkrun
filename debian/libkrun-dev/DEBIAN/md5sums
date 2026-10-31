@@ -1,0 +1,6 @@
+c41848ef2a4a270d1c113864c66ec531  usr/include/libkrun.h
+2caeb3375223433117c17a1dd2274fc4  usr/include/libkrun_display.h
+60c0e2d92d9f0327715f5142d254e30b  usr/include/libkrun_input.h
+61626b9540f5900b4ca9086ee117559a  usr/lib/x86_64-linux-gnu/pkgconfig/libkrun.pc
+25fd362e3a87fce07aac9ca5d7e746c4  usr/share/doc/libkrun-dev/changelog.Debian.gz
+ac53728f0fce9477dd9303f6a8ff616d  usr/share/doc/libkrun-dev/copyright

@@ -1,0 +1,29 @@
+# Source replacement for the package build. Neither the crates.io registry nor
+# the ffier git repository is reachable from a build daemon, and the workspace
+# pins two commits of ffier whose packages share a name and version, so each
+# source gets its own directory source. debian/update-vendor.sh fills them in.
+#
+# A replaced git source must also carry the location it stands for; cargo
+# rejects a `[source]` table that holds only `replace-with`.
+
+[source.crates-io]
+replace-with = "vendored-crates-io"
+
+[source."git+https://github.com/mtjhrc/ffier.git?tag=0.2.0rc1"]
+git = "https://github.com/mtjhrc/ffier.git"
+tag = "0.2.0rc1"
+replace-with = "vendored-ffier-0.2.0rc1"
+
+[source."git+https://github.com/mtjhrc/ffier.git?tag=v0.2.0-rc2"]
+git = "https://github.com/mtjhrc/ffier.git"
+tag = "v0.2.0-rc2"
+replace-with = "vendored-ffier-v0.2.0-rc2"
+
+[source.vendored-crates-io]
+directory = "vendor"
+
+[source."vendored-ffier-0.2.0rc1"]
+directory = "vendor-ffier-0.2.0rc1"
+
+[source."vendored-ffier-v0.2.0-rc2"]
+directory = "vendor-ffier-v0.2.0-rc2"

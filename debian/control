@@ -1,0 +1,62 @@
+Source: libkrun
+Section: libs
+Priority: optional
+Maintainer: Aria Stewart <aredridel@dinhe.net>
+Build-Depends: debhelper-compat (= 13),
+               cargo-1.88 | cargo (>= 1.88),
+               rustc-1.88 | rustc (>= 1.88),
+               rustfmt-1.88 | rustfmt,
+               pkg-config,
+               libclang-dev,
+               libvirglrenderer-dev,
+               libc6-dev
+Standards-Version: 4.7.2
+Homepage: https://github.com/libkrun/libkrun
+Vcs-Git: https://github.com/libkrun/libkrun.git
+Vcs-Browser: https://github.com/libkrun/libkrun
+Rules-Requires-Root: no
+
+Package: libkrun2
+Architecture: any
+Multi-Arch: same
+Depends: ${shlibs:Depends},
+         ${misc:Depends}
+Suggests: libkrunfw5
+Description: Virtualization-based process isolation library
+ libkrun lets a program run processes in a partially isolated environment
+ using hardware virtualization: KVM on Linux, HVF on macOS and WHP on
+ Windows. It embeds the userspace side of the hypervisor and the minimum set
+ of virtio devices a container-like workload needs, and exposes a C API.
+ .
+ The guest kernel is loaded from libkrunfw at run time.
+
+Package: libkrun-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends: libkrun2 (= ${binary:Version}),
+         ${misc:Depends}
+Description: Development files for libkrun
+ Headers and pkg-config metadata for building programs that embed libkrun.
+
+Package: libkrun-init0
+Section: libs
+Architecture: any
+Multi-Arch: same
+Depends: ${shlibs:Depends},
+         ${misc:Depends}
+Description: Guest init configuration library for libkrun
+ Host-side library that builds the configuration a libkrun guest needs and
+ injects it, together with the PID 1 binary it embeds, into the guest
+ filesystem overlay. It also converts OCI container specifications into guest
+ initialization structures.
+
+Package: libkrun-init-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends: libkrun-init0 (= ${binary:Version}),
+         ${misc:Depends}
+Description: Development files for the libkrun guest init library
+ Headers and pkg-config metadata for building programs against
+ libkrun_init.

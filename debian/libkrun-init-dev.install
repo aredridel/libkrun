@@ -1,0 +1,3 @@
+usr/include/libkrun_init.h
+usr/lib/*/libkrun_init.so
+usr/lib/*/pkgconfig/libkrun_init.pc

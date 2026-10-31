@@ -1,0 +1,103 @@
+#!/usr/bin/make -f
+
+include /usr/share/dpkg/architecture.mk
+
+export DH_VERBOSE = 1
+
+# The build is fully offline: debian/update-vendor.sh fills the directory
+# sources that debian/cargo-home/config.toml points at. Relative paths in that
+# file resolve against the parent of CARGO_HOME.
+export CARGO_HOME = $(CURDIR)/debian/cargo-home
+export CARGO_NET_OFFLINE = true
+
+# The Makefile picks its library directory from /etc/debian_version; the package
+# layout has to follow dpkg's view of the host instead.
+LIBDIR = lib/$(DEB_HOST_MULTIARCH)
+
+# libkrun needs rustc 1.88 for let-chains and [T]::as_chunks, and the ffier binding
+# generator in bindings/libkrun-via-cdylib-weak runs `rustfmt` on the code it
+# emits. Debian ships one toolchain under the plain `cargo`, `rustc` and `rustfmt`
+# names; Ubuntu also ships parallel-installable toolchains whose binaries carry a
+# version suffix, and its plain ones can be older. The upstream Makefile,
+# init/init-blob/build.rs and the ffier generator all invoke those names, so where
+# the versioned toolchain is installed it goes in front of PATH under them. An
+# empty shim directory leaves the plain names in use.
+RUST_SHIM_VERSION = 1.88
+RUST_SHIM_DIR = $(CURDIR)/debian/rust-bin
+VERSIONED_CARGO = $(wildcard /usr/bin/cargo-$(RUST_SHIM_VERSION))
+VERSIONED_RUSTC = $(wildcard /usr/bin/rustc-$(RUST_SHIM_VERSION))
+# Ubuntu's versioned rustfmt has no /usr/bin name of its own; the plain rustfmt
+# package installs the formatter for the archive's default toolchain.
+VERSIONED_RUSTFMT = $(wildcard /usr/lib/rust-$(RUST_SHIM_VERSION)/bin/rustfmt)
+PATH := $(RUST_SHIM_DIR):$(PATH)
+export PATH
+
+# The guest init is PID 1 inside the VM. Upstream cross-compiles it for musl,
+# which needs a rustup toolchain that Debian and Ubuntu do not ship; a static
+# glibc binary has the same effect and needs only libc6-dev. The init-blob crate
+# takes the binary through KRUN_INIT_BINARY_PATH instead of building it.
+INIT_TRIPLE_amd64 = x86_64-unknown-linux-gnu
+INIT_TRIPLE_arm64 = aarch64-unknown-linux-gnu
+INIT_TRIPLE_riscv64 = riscv64gc-unknown-linux-gnu
+INIT_TRIPLE = $(INIT_TRIPLE_$(DEB_HOST_ARCH))
+INIT_TARGET_DIR = $(CURDIR)/debian/init-target
+export KRUN_INIT_BINARY_PATH = $(INIT_TARGET_DIR)/$(INIT_TRIPLE)/release/krun-init
+
+# rutabaga_gfx needs virglrenderer >= 1.3.0 and fails to build against anything
+# older, so the GPU device model is enabled only where that version is present.
+# The map2 fast path stays off: virgl_resource_map2 calls Rutabaga::resource_map
+# and RUTABAGA_HANDLE_TYPE_MEM_SHM, which no published rutabaga_gfx provides.
+VIRGL_MIN_VERSION = 1.3.0
+ifeq ($(shell pkg-config --atleast-version=$(VIRGL_MIN_VERSION) virglrenderer 2>/dev/null && echo yes),yes)
+GPU = 1
+else
+GPU = 0
+endif
+
+# PREFIX is needed while building as well: the Makefile generates the pkg-config
+# files from it and does not regenerate them when only PREFIX changes.
+MAKE_VARS = LIBDIR_Linux=$(LIBDIR) PREFIX=/usr
+GENERIC_FEATURES = BLK=1 NET=1 INPUT=1 VHOST_USER=1 TIMESYNC=1 GPU=$(GPU) FFI=1
+VENDOR_DIRS = debian/vendor debian/vendor-ffier-0.2.0rc1 debian/vendor-ffier-v0.2.0-rc2
+
+%:
+	dh $@
+
+rust-shim:
+	mkdir -p $(RUST_SHIM_DIR)
+	$(if $(VERSIONED_CARGO),ln -sf $(VERSIONED_CARGO) $(RUST_SHIM_DIR)/cargo)
+	$(if $(VERSIONED_RUSTC),ln -sf $(VERSIONED_RUSTC) $(RUST_SHIM_DIR)/rustc)
+	$(if $(VERSIONED_RUSTFMT),ln -sf $(VERSIONED_RUSTFMT) $(RUST_SHIM_DIR)/rustfmt)
+
+override_dh_auto_build: rust-shim
+	@for dir in $(VENDOR_DIRS); do \
+		if [ ! -d "$$dir" ]; then \
+			echo "error: $$dir is missing, run debian/update-vendor.sh" >&2; \
+			exit 1; \
+		fi; \
+	done
+ifeq ($(GPU),0)
+	@echo "warning: virglrenderer >= $(VIRGL_MIN_VERSION) is not available," \
+		"building without the GPU device model" >&2
+endif
+	RUSTFLAGS='-C target-feature=+crt-static' \
+		cargo build --release \
+		--manifest-path init/init-binary/Cargo.toml \
+		--target $(INIT_TRIPLE) \
+		--target-dir $(INIT_TARGET_DIR) \
+		--features timesync
+	$(MAKE) $(MAKE_VARS) $(GENERIC_FEATURES)
+
+override_dh_auto_install: rust-shim
+	$(MAKE) $(MAKE_VARS) $(GENERIC_FEATURES) DESTDIR=$(CURDIR)/debian/tmp install
+
+override_dh_auto_clean:
+	rm -rf target debian/init-target debian/rust-bin \
+		debian/cargo-home/registry debian/cargo-home/git
+
+# The test suite boots virtual machines and needs KVM plus libkrunfw, neither of
+# which a build daemon has.
+override_dh_auto_test:
+
+override_dh_missing:
+	dh_missing --fail-missing

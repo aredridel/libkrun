@@ -1,0 +1,10 @@
+/.debhelper/
+/cargo-home/registry/
+/cargo-home/git/
+/cargo-home/.package-cache
+/cargo-home/.package-cache-mutate
+/cargo-home/.global-cache
+/files
+/init-target/
+/rust-bin/
+/tmp/
